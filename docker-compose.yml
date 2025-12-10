@@ -1,0 +1,113 @@
+version: "3.9"
+
+x-opencex-env: &opencex-env
+  DOMAIN: ${DOMAIN:-exchange.africoin.ai}
+  ADMIN_BASE_URL: ${ADMIN_BASE_URL:-admin_panel}
+  DB_USER: ${DB_USER:-opencex}
+  DB_PASS: ${DB_PASS:-opencex}
+  DB_NAME: ${DB_NAME:-opencex}
+
+services:
+  caddy:
+    image: caddy:2.7-alpine
+    container_name: opencex-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    restart: unless-stopped
+    environment:
+      <<: *opencex-env
+    depends_on:
+      - nuxt
+      - admin
+      - opencex
+      - opencex-wss
+
+  nuxt:
+    build:
+      context: ./nuxt
+    container_name: nuxt
+    restart: unless-stopped
+    environment:
+      <<: *opencex-env
+    depends_on:
+      - opencex
+
+  admin:
+    build:
+      context: ./admin
+    container_name: admin
+    restart: unless-stopped
+    environment:
+      <<: *opencex-env
+
+  opencex:
+    build:
+      context: ./backend
+    container_name: opencex
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-opencex}
+      POSTGRES_PASSWORD: ${DB_PASS:-opencex}
+      POSTGRES_DB: ${DB_NAME:-opencex}
+      ALLOWED_HOSTS: ${DOMAIN:-exchange.africoin.ai}
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+
+  opencex-wss:
+    build:
+      context: ./backend
+    container_name: opencex-wss
+    command: daphne -b 0.0.0.0 exchange.asgi:application --ping-interval 600 --ping-timeout 600
+    restart: unless-stopped
+    depends_on:
+      - opencex
+
+  postgresql:
+    image: postgres:15
+    container_name: postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-opencex}
+      POSTGRES_PASSWORD: ${DB_PASS:-opencex}
+      POSTGRES_DB: ${DB_NAME:-opencex}
+    volumes:
+      - postgresql_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.9.22-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${AMQP_USER:-opencex}
+      RABBITMQ_DEFAULT_PASS: ${AMQP_PASS:-opencex}
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq/
+      - rabbitmq_logs:/var/log/rabbitmq/
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgresql_data:
+  rabbitmq_data:
+  rabbitmq_logs:

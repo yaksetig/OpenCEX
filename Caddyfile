@@ -1,0 +1,25 @@
+{
+    email admin@example.com
+}
+
+exchange.africoin.ai {
+    encode gzip
+
+    handle_path /admin_panel* {
+        reverse_proxy admin:80
+    }
+
+    handle_path /api/* {
+        reverse_proxy opencex:8080
+    }
+
+    handle_path /wsapi* {
+        reverse_proxy opencex-wss:8000
+    }
+
+    handle_path /staticfiles/* {
+        reverse_proxy opencex:8080
+    }
+
+    reverse_proxy frontend:80
+}
