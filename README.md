@@ -72,6 +72,7 @@ Developed by <a href="https://polygant.net" target="_blank">Polygant</a>.
 
 You need to SSH into your server as root and run the following command:
 
+    sudo -i ;
     mkdir /app ;
     cd /app/ || exit ;
     git clone https://github.com/Polygant/OpenCEX.git ./deploy ;
