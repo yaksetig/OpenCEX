@@ -72,10 +72,10 @@ Developed by <a href="https://polygant.net" target="_blank">Polygant</a>.
 
 You need to SSH into your server as root and run the following command:
 
-    mkdir /app ; 
-    cd /app/ || exit ; 
+    mkdir /app ;
+    cd /app/ || exit ;
     git clone https://github.com/Polygant/OpenCEX.git ./deploy ;
-    cd deploy ; 
+    cd deploy ;
     chmod +x opencex.sh ;
     ./opencex.sh 2>&1 | tee /tmp/install.txt
 
@@ -83,9 +83,24 @@ Installation time ~ 5 minutes.
 
 If something goes wrong you can clean the installation and try again
 
-    cd /app/opencex && docker compose down ; 
+    cd /app/opencex && docker compose down ;
     rm -rf /app ;
     docker system prune -a
+
+## Quick redeploy with docker compose
+
+The repository now ships with a production-ready compose stack and Caddyfile. After
+populating `.env` with your domain and database credentials you can rebuild and
+start the services with:
+
+```
+docker compose build
+docker compose up -d
+```
+
+The configuration will expose the trading UI at `/`, the admin panel at
+`/admin_panel/`, REST API under `/api/`, and WebSocket traffic via `/wsapi` on the
+same `exchange.africoin.ai` host.
 
 🥳 Congratulations, the exchange has been successfully installed!  
 You can open it by your domain name.
