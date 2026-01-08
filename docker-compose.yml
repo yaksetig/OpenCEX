@@ -1,0 +1,400 @@
+version: "3.7"
+x-domain: &domain ${DOMAIN:-:80}
+
+networks:
+  caddy:
+    external: true
+
+services:
+  opencex:
+    container_name: opencex
+    image: opencex:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: gunicorn exchange.wsgi:application -b 0.0.0.0:8080 -w 2 --access-logfile - --error-logfile -
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    labels:
+      caddy: *domain
+      caddy.@api.path: /api /api/*
+      caddy.reverse_proxy: "@api {{upstreams 8080}}"
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+
+  opencex-wss:
+    container_name: opencex-wss
+    image: opencex:latest
+    command: daphne -b 0.0.0.0 exchange.asgi:application --ping-interval 600 --ping-timeout 600
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    labels:
+      caddy: *domain
+      caddy.@ws.path: /ws /ws/*
+      caddy.reverse_proxy: "@ws {{upstreams 8000}}"
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-cel:
+    container_name: opencex-cel
+    image: opencex:latest
+    command: celery -A exchange worker -l info -n general -B -s /tmp/cebeat.db -X btc,eth_new_blocks,eth_deposits,eth_payouts,eth_check_balances,eth_accumulations,eth_tokens_accumulations,eth_send_gas,bnb_new_blocks,bnb_deposits,bnb_payouts,bnb_check_balances,bnb_accumulations,bnb_tokens_accumulations,bnb_send_gas,trx_new_blocks,trx_deposits,trx_payouts,trx_check_balances,trx_accumulations,trx_tokens_accumulations,matic_new_blocks,matic_deposits,matic_payouts,matic_check_balances,matic_accumulations,matic_tokens_accumulations
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-stack:
+    container_name: opencex-stack
+    image: opencex:latest
+    command: python bin/stack.py
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-btc:
+    container_name: opencex-btc
+    image: opencex:latest
+    command: /app/manage.py btcworker
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-eth-blocks:
+    container_name: opencex-eth-blocks
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n eth_new_blocks -Q eth_new_blocks -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-bnb-blocks:
+    container_name: opencex-bnb-blocks
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n bnb_new_blocks -Q bnb_new_blocks -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-trx-blocks:
+    container_name: opencex-trx-blocks
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n trx_new_blocks -Q trx_new_blocks -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-matic-blocks:
+    container_name: opencex-matic-blocks
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n matic_new_blocks -Q matic_new_blocks -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-deposits:
+    container_name: opencex-deposits
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n deposits -Q trx_deposits,bnb_deposits,eth_deposits,matic_deposits -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-payouts:
+    container_name: opencex-payouts
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n payouts -Q trx_payouts,eth_payouts,bnb_payouts,matic_payouts -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-balances:
+    container_name: opencex-balances
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n check_balances -Q trx_check_balances,bnb_check_balances,eth_check_balances,matic_check_balances -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-coin-accumulations:
+    container_name: opencex-coin-accumulations
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n coin_accumulations -Q trx_accumulations,bnb_accumulations,eth_accumulations,matic_accumulations -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-token-accumulations:
+    container_name: opencex-token-accumulations
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n tokens_accumulations -Q trx_tokens_accumulations,bnb_tokens_accumulations,eth_tokens_accumulations,matic_tokens_accumulations -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  opencex-gas:
+    container_name: opencex-gas
+    image: opencex:latest
+    command: bash -c "celery -A exchange worker -l info -n send_gas -Q trx_send_gas,bnb_send_gas,eth_send_gas,matic_send_gas -c 1 "
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    depends_on:
+      - postgresql
+      - redis
+      - rabbitmq
+      - frontend
+      - nuxt
+      - caddy
+      - bitcoind
+      - opencex
+
+  frontend:
+    container_name: frontend
+    image: frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    volumes:
+      - ./backend:/app
+    networks:
+      - caddy
+    labels:
+      caddy: *domain
+      caddy.reverse_proxy: "{{upstreams 80}}"
+
+  nuxt:
+    container_name: nuxt
+    image: nuxt:latest
+    build:
+      context: ./nuxt
+      dockerfile: Dockerfile
+    restart: always
+    networks:
+      - caddy
+
+  admin:
+    container_name: admin
+    image: admin:latest
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    restart: always
+    networks:
+      - caddy
+
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:latest
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    environment:
+      - CADDY_INGRESS_NETWORKS=caddy
+    networks:
+      - caddy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./caddy_data:/data
+
+  postgresql:
+    container_name: postgresql
+    hostname: postgresql
+    image: postgres:latest
+    restart: always
+    shm_size: 1g
+    volumes:
+      - ./postgresql_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+    networks:
+      - caddy
+
+  redis:
+    container_name: redis
+    image: redis:latest
+    restart: always
+    volumes:
+      - ./redis_data:/data
+    entrypoint: redis-server
+    networks:
+      - caddy
+
+  rabbitmq:
+    container_name: rabbitmq
+    hostname: rabbitmq
+    image: rabbitmq:3.9.22-management
+    restart: always
+    volumes:
+      - ./rabbitmq_data:/var/lib/rabbitmq/
+      - ./rabbitmq_logs:/var/log/rabbitmq/
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_DEFAULT_USER}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_DEFAULT_PASS}"
+      RABBITMQ_DEFAULT_VHOST: /
+    networks:
+      - caddy
+
+  bitcoind:
+    container_name: bitcoind
+    image: lncm/bitcoind:v24.0.1
+    restart: always
+    volumes:
+      - ./bitcoind_data:/data/.bitcoin/
+    networks:
+      - caddy

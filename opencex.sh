@@ -846,6 +846,7 @@ docker network create caddy
 
 cat << EOF > docker-compose.yml
 version: "3.7"
+x-domain: &domain \${DOMAIN:-:80}
 networks:
   caddy:
     external: true
@@ -860,6 +861,10 @@ services:
       - /app/opencex/backend:/app
      networks:
       - caddy
+     labels:
+      caddy: *domain
+      caddy.@api.path: /api /api/*
+      caddy.reverse_proxy: "@api {{upstreams 8080}}"
      depends_on:
       - postgresql
       - redis
@@ -878,6 +883,10 @@ services:
       - /app/opencex/backend:/app
      networks:
       - caddy
+     labels:
+      caddy: *domain
+      caddy.@ws.path: /ws /ws/*
+      caddy.reverse_proxy: "@ws {{upstreams 8000}}"
      depends_on:
       - postgresql
       - redis
@@ -1144,7 +1153,7 @@ services:
      networks:
      - caddy
      labels:
-      caddy: $DOMAIN
+      caddy: *domain
       caddy.reverse_proxy: "{{upstreams 80}}"
     nuxt:
      image: nuxt:latest
@@ -1210,9 +1219,6 @@ services:
          RABBITMQ_DEFAULT_VHOST: /
      networks:
        - caddy
-     labels:
-       caddy: $RMQDOMAIN
-       caddy.reverse_proxy: "{{upstreams http 15672}}"
     bitcoind:
       container_name: bitcoind
       restart: always

@@ -72,31 +72,61 @@ Developed by <a href="https://polygant.net" target="_blank">Polygant</a>.
 -   OPTIONAL. For KYC you will need Sumsub credentials ([https://sumsub.com/](https://sumsub.com/))
     
 
-## Installation
+## Quick Start
 
-You need to SSH into your server as root and run the following command:
+### Prerequisites
+- Docker and Docker Compose
+- Open ports 80 and 443 (if using HTTPS)
 
-    mkdir /app ; 
-    cd /app/ || exit ; 
-    git clone https://github.com/Polygant/OpenCEX.git ./deploy ;
-    cd deploy ; 
-    chmod +x opencex.sh ;
-    ./opencex.sh 2>&1 | tee /tmp/install.txt
+### Installation
 
-Installation time ~ 5 minutes.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourorg/opencex.git
+   cd opencex
+   ```
 
-If something goes wrong you can clean the installation and try again
+2. Run the setup script:
+   ```bash
+   chmod +x setup.sh
+   ./setup.sh
+   ```
 
-    cd /app/opencex && docker compose down ; 
-    rm -rf /app ;
-    docker system prune -a
+### Manual Setup
 
-🥳 Congratulations, the exchange has been successfully installed!  
-You can open it by your domain name.
+If you prefer manual setup:
 
-**After installation, you need to download the file /app/openex/backend/save_to_self_and_delete.txt and delete it from the server.**
+1. Create external network:
+   ```bash
+   docker network create caddy
+   ```
 
-**Mind that BTC node will take up to 30 hours to fully sync. BTC transactions sent to user addresses in this period will be collected and credited only after a full sync.**
+2. Copy environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. For HTTP-only (development):
+   - Leave `DOMAIN=:80` in .env
+
+4. For HTTPS with custom domain:
+   - Set `DOMAIN=yourdomain.com` in .env
+   - Ensure DNS points to your server
+
+5. Start services:
+   ```bash
+   docker compose up -d
+   ```
+
+### Common Issues
+
+**Issue: Caddy shows errors about certificates**
+- Solution: You're using an AWS EC2 hostname or IP address. Set `DOMAIN=:80` for HTTP-only mode, or use a real domain name.
+
+**Issue: Services not accessible**
+- Check: `docker ps` - all containers should be "Up"
+- Check: `docker logs opencex-caddy-1` for errors
+- Verify ports 80/443 are open in firewall/security groups
 
 ## Documentation
 -   [OpenCEX Help Center](https://www.notion.so/polygant/OpenCEX-Help-Center-8cf8c842bde947c3818a615a88ceef9c)
