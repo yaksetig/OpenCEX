@@ -1,16 +1,25 @@
 #!/bin/bash
 
 if [ $(dpkg-query -W -f='${Status}' docker-ce 2>/dev/null | grep -c "ok installed") -eq 0 ]; then
-    echo "Docker not found, install docker..."
+    echo "Docker not found, installing docker..."
     sudo apt-get update > /dev/null 2>&1
     sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release > /dev/null 2>&1
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /usr/share/keyrings/docker-archive-keyring.gpg
-    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     sudo apt-get update > /dev/null 2>&1
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io git docker-compose-plugin > /dev/null 2>&1
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin git > /dev/null 2>&1
     sudo systemctl enable docker > /dev/null 2>&1
     sudo systemctl start docker > /dev/null 2>&1
-    echo "Docker has been successfully installed."
+    # Wait for Docker daemon to be ready
+    echo "Waiting for Docker daemon to start..."
+    sleep 5
+    until sudo docker info > /dev/null 2>&1; do
+        echo "Docker is not ready yet, waiting..."
+        sleep 3
+    done
+    echo "Docker has been successfully installed and is ready."
 else
     echo "Docker already installed."
 fi
@@ -56,7 +65,7 @@ if test ! -f "$FILE"; then
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 1 OF 12. PROJECT VARIABLES
+     STEP 1 OF 13. PROJECT VARIABLES
 ===========================================================
 
 PROJECT_NAME* - name of your exchange
@@ -126,7 +135,7 @@ done
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 2 OF 12. COMMON SERVICES
+     STEP 2 OF 13. COMMON SERVICES
 ===========================================================
 
 RECAPTCHA* - Google Captcha site key
@@ -176,7 +185,7 @@ done
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 3 OF 12. BLOCKCHAIN SERVICES
+     STEP 3 OF 13. BLOCKCHAIN SERVICES
 ===========================================================
 
 INFURA_API_KEY* - used for the ETH blockchain data
@@ -214,7 +223,7 @@ done
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 4 OF 12. SAFE ADDRESSES
+     STEP 4 OF 13. SAFE ADDRESSES
 ===========================================================
 
 BTC_SAFE_ADDR* - bitcoin address. All BTC deposits go there
@@ -386,7 +395,7 @@ done
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 8 OF 12. EMAIL SERVICE
+     STEP 8 OF 13. EMAIL SERVICE
 ===========================================================
 
 Used for sending notifications and alerts.
@@ -429,7 +438,7 @@ done
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 9 OF 12. SMS SERVICE TWILIO (optional)
+     STEP 9 OF 13. SMS SERVICE TWILIO (optional)
 ===========================================================
 
 Used for sending notifications and alerts. 
@@ -476,7 +485,7 @@ done
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 10 OF 12. KYC PROVIDER SUMSUB (OPTIONAL)
+     STEP 10 OF 13. KYC PROVIDER SUMSUB (OPTIONAL)
 ===========================================================
 
 Used for KYC. 
@@ -519,7 +528,7 @@ done
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 11 OF 12. KYT PROVIDER SCORECHAIN (OPTIONAL)
+     STEP 11 OF 13. KYT PROVIDER SCORECHAIN (OPTIONAL)
 ===========================================================
 
 Used for KYT. 
@@ -567,7 +576,7 @@ done
 echo "`cat <<YOLLOPUKKI
 
 ===========================================================
-     STEP 12 OF 12. MARKET MAKING BOT - HUMMINGBOT (OPTIONAL)
+     STEP 12 OF 13. MARKET MAKING BOT - HUMMINGBOT (OPTIONAL)
 ===========================================================
 
 Used for market making and other strategies.
@@ -582,6 +591,36 @@ while true; do
 echo -n "IS_HUMMINGBOT_ENABLED (True/False): "
 read IS_HUMMINGBOT_ENABLED
 export IS_HUMMINGBOT_ENABLED
+
+echo "-----------------------------------------------------------"
+    read -p "IS EVERYTHING CORRECT? (y or n)" YESORNO
+    case $YESORNO in
+        [Yy]* ) break;;
+        [Nn]* ) echo "Re-enter the parameters.";;
+        * ) break;;
+    esac
+done
+
+echo "`cat <<YOLLOPUKKI
+
+===========================================================
+     STEP 13 OF 13. DYNAMIC WALLET AUTHENTICATION (REQUIRED)
+===========================================================
+
+Dynamic provides wallet-based authentication for your exchange.
+Users will connect their crypto wallets (MetaMask, WalletConnect, etc.)
+to authenticate instead of using email/password.
+
+Get your Environment ID from https://app.dynamic.xyz/dashboard
+
+-----------------------------------------------------------
+YOLLOPUKKI`"
+
+while true; do
+
+echo -n "DYNAMIC_ENVIRONMENT_ID* (from app.dynamic.xyz): "
+read DYNAMIC_ENVIRONMENT_ID
+export DYNAMIC_ENVIRONMENT_ID
 
 echo "-----------------------------------------------------------"
     read -p "IS EVERYTHING CORRECT? (y or n)" YESORNO
@@ -672,6 +711,9 @@ SUPPORT_EMAIL=$SUPPORT_EMAIL
 FACEBOOK=$FACEBOOK
 TWITTER=$TWITTER
 LINKEDIN=$LINKEDIN
+
+#Dynamic wallet authentication
+DYNAMIC_ENVIRONMENT_ID=$DYNAMIC_ENVIRONMENT_ID
 EOF
 
 fi
@@ -680,6 +722,85 @@ fi
 # START BUILDING!
 ##################
 
+##################
+# DYNAMIC WALLET AUTHENTICATION SETUP
+##################
+
+echo "Setting up Dynamic wallet authentication..."
+
+# Copy Dynamic auth module to backend
+cp -r /app/deploy/backend/dynamic_auth /app/opencex/backend/
+
+# Add dynamic_auth to INSTALLED_APPS in Django settings
+if ! grep -q "dynamic_auth" /app/opencex/backend/exchange/settings/common.py; then
+    sed -i "/INSTALLED_APPS = \[/a\    'dynamic_auth'," /app/opencex/backend/exchange/settings/common.py
+fi
+
+# Add Dynamic auth URLs to backend
+if ! grep -q "dynamic_auth" /app/opencex/backend/core/urls.py; then
+    # Add import
+    sed -i "1i from django.urls import include" /app/opencex/backend/core/urls.py 2>/dev/null || true
+    # Add URL pattern for auth/dynamic/
+    sed -i "/urlpatterns = \[/a\    path('api/auth/', include('dynamic_auth.urls'))," /app/opencex/backend/core/urls.py
+fi
+
+# Add Dynamic settings to auth.py
+cat << 'DYNAMICSETTINGS' >> /app/opencex/backend/exchange/settings/auth.py
+
+# Dynamic Wallet Authentication
+import os
+DYNAMIC_ENVIRONMENT_ID = os.environ.get('DYNAMIC_ENVIRONMENT_ID', '')
+DYNAMIC_JWKS_CACHE_TTL = 600
+DYNAMICSETTINGS
+
+# Add Dynamic authentication class to DRF settings
+if ! grep -q "DynamicWalletAuthentication" /app/opencex/backend/exchange/settings/rest.py; then
+    sed -i "s/'DEFAULT_AUTHENTICATION_CLASSES': \[/'DEFAULT_AUTHENTICATION_CLASSES': [\n        'dynamic_auth.authentication.DynamicWalletAuthentication',/" /app/opencex/backend/exchange/settings/rest.py
+fi
+
+# Copy Dynamic auth components to frontend
+mkdir -p /app/opencex/frontend/src/dynamic_auth
+cp -r /app/deploy/frontend/dynamic_auth/* /app/opencex/frontend/src/dynamic_auth/
+
+# Add Dynamic SDK dependencies to frontend package.json
+cd /app/opencex/frontend
+if ! grep -q "@dynamic-labs/sdk-react-core" package.json; then
+    # Use node to add dependencies properly
+    npm install --save @dynamic-labs/sdk-react-core @dynamic-labs/ethereum 2>/dev/null || true
+fi
+
+# Create a setup file for frontend to integrate Dynamic
+cat << 'FRONTENDSETUP' > /app/opencex/frontend/src/dynamic_auth/setup.js
+/**
+ * Dynamic Auth Setup for OpenCEX Frontend
+ *
+ * Import this file in your main.ts/main.js and call setupDynamicAuth(app, store)
+ */
+import DynamicProvider from './DynamicProvider.vue';
+import DynamicLogin from './DynamicLogin.vue';
+import walletStore from './wallet-store';
+
+export function setupDynamicAuth(app, store) {
+  // Set environment ID
+  window.DYNAMIC_ENVIRONMENT_ID = '${DYNAMIC_ENVIRONMENT_ID}';
+
+  // Register components
+  app.component('DynamicProvider', DynamicProvider);
+  app.component('DynamicLogin', DynamicLogin);
+
+  // Register store module
+  if (store && !store.hasModule('wallet')) {
+    store.registerModule('wallet', walletStore);
+  }
+}
+
+export { DynamicProvider, DynamicLogin, walletStore };
+FRONTENDSETUP
+
+# Replace the setup.js placeholder with actual env value
+sed -i "s/\${DYNAMIC_ENVIRONMENT_ID}/$DYNAMIC_ENVIRONMENT_ID/g" /app/opencex/frontend/src/dynamic_auth/setup.js
+
+echo "Dynamic wallet authentication setup complete."
 
 # build front
 mkdir -p /app/opencex/frontend/deploy/
